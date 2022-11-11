@@ -723,6 +723,10 @@ public abstract class AbstractCairoTest {
         }
     }
 
+    protected String registerTableName(CharSequence tableName) {
+        return engine.registerTableName(tableName, false);
+    }
+
     static {
         for (int i = 0; i < MemoryTag.SIZE; i++) {
             FACTORY_TAGS[i] = !Chars.startsWith(MemoryTag.nameOf(i), "MMAP");

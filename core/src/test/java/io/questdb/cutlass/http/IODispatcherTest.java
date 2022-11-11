@@ -7032,7 +7032,7 @@ public class IODispatcherTest {
         try (TableModel model = new TableModel(configuration, tableName, partitionBy)
                 .timestamp("ts")
                 .col("int", ColumnType.INT)) {
-            CairoTestUtils.createTable(model, tableName);
+            CairoTestUtils.create(model);
         }
 
         String command = "POST /upload?fmt=json&" +

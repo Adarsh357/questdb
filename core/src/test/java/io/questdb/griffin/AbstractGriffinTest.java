@@ -1507,7 +1507,7 @@ public abstract class AbstractGriffinTest extends AbstractCairoTest {
             String startDate,
             int partitionCount
     ) throws NumericException, SqlException {
-        CharSequence systemTableName = engine.getSystemTableName(tableModel.getTableName());
+        CharSequence systemTableName = registerTableName(tableModel.getTableName());
         try (
                 MemoryMARW mem = Vm.getMARWInstance();
                 Path path = new Path().of(configuration.getRoot()).concat(systemTableName)

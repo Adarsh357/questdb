@@ -7017,7 +7017,7 @@ public class SqlParserTest extends AbstractSqlParserTest {
     @Test
     public void testTableNameLocked() throws Exception {
         assertMemoryLeak(() -> {
-            String systemTableName = engine.getSystemTableName("tab");
+            String systemTableName = registerTableName("tab");
             CharSequence lockedReason = engine.lock(AllowAllCairoSecurityContext.INSTANCE, systemTableName, "testing");
             Assert.assertNull(lockedReason);
             try {
@@ -7038,7 +7038,7 @@ public class SqlParserTest extends AbstractSqlParserTest {
                         TableModel tableModel = tableModels[i];
                         CharSequence systemTableName1 = engine.getSystemTableName(tableModel.getName());
                         Path path = tableModel.getPath().of(tableModel.getConfiguration().getRoot()).concat(systemTableName1).slash$();
-                        Assert.assertEquals(0, configuration.getFilesFacade().rmdir(path));
+                        configuration.getFilesFacade().rmdir(path);
                         tableModel.close();
                     }
                 }

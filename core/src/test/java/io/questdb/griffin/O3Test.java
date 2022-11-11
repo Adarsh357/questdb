@@ -99,7 +99,7 @@ public class O3Test extends AbstractO3Test {
                 .timestamp()
                 .col("supplier", ColumnType.SYMBOL)
         ) {
-            CairoTestUtils.createTable(model, tableName);
+            CairoTestUtils.create(model);
 
             short[] columnTypes = new short[]{ColumnType.INT, ColumnType.STRING, ColumnType.SYMBOL, ColumnType.DOUBLE};
             IntList newColTypes = new IntList();

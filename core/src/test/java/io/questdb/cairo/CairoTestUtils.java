@@ -37,14 +37,16 @@ public class CairoTestUtils {
     }
 
     public static void create(TableModel model, CairoEngine engine) {
+        int tableId = 1;
+        String systemTableName = engine.getTableSequencerAPI().registerTableName(model.getTableName(), tableId, false);
         TableUtils.createTable(
                 model.getConfiguration(),
                 model.getMem(),
                 model.getPath(),
                 model,
                 ColumnType.VERSION,
-                1,
-                engine.getSystemTableName(model.getTableName())
+                tableId,
+                systemTableName
         );
     }
 
@@ -54,7 +56,7 @@ public class CairoTestUtils {
 
     public static void createAllTable(CairoEngine engine, int partitionBy) {
         try (TableModel model = getAllTypesModel(engine.getConfiguration(), partitionBy)) {
-            createTableWithVersionAndId(model, engine, ColumnType.VERSION, 1);
+            create(model, engine);
         }
     }
 
@@ -66,27 +68,12 @@ public class CairoTestUtils {
 
     public static void createAllTableWithTimestamp(CairoEngine engine, int partitionBy) {
         try (TableModel model = getAllTypesModel(engine.getConfiguration(), partitionBy).col("ts", ColumnType.TIMESTAMP).timestamp()) {
-            createTableWithVersionAndId(model, engine, ColumnType.VERSION, 1);
+            create(model, engine);
         }
     }
 
-    public static void createTable(TableModel model, CharSequence systemTableName) {
-        createTable(model, ColumnType.VERSION, systemTableName);
-    }
-
-    public static void createTable(TableModel model, int version, CharSequence systemTableName) {
-        TableUtils.createTable(
-                model.getConfiguration(),
-                model.getMem(),
-                model.getPath(),
-                model,
-                version,
-                1,
-                systemTableName
-        );
-    }
-
     public static void createTableWithVersionAndId(TableModel model, CairoEngine engine, int version, int tableId) {
+        String systemTableName = engine.getTableSequencerAPI().registerTableName(model.getTableName(), tableId, false);
         TableUtils.createTable(
                 model.getConfiguration(),
                 model.getMem(),
@@ -94,7 +81,7 @@ public class CairoTestUtils {
                 model,
                 version,
                 tableId,
-                engine.getSystemTableName(model.getTableName())
+                systemTableName
         );
     }
 

@@ -688,6 +688,7 @@ public class SecurityTest extends AbstractGriffinTest {
                     " rnd_double(2) d," +
                     " timestamp_sequence(0, 1000000000) ts" +
                     " from long_sequence(10000)) timestamp(ts)", sqlExecutionContext);
+
             try {
                 assertQuery(
                         memoryRestrictedCompiler,
@@ -700,6 +701,26 @@ public class SecurityTest extends AbstractGriffinTest {
                 Assert.fail();
             } catch (Exception ex) {
                 MatcherAssert.assertThat(ex.toString(), Matchers.containsString("limit of 2 resizes exceeded"));
+            }
+        });
+    }
+
+    protected static void assertMemoryLeak(TestUtils.LeakProneCode code) throws Exception {
+        TestUtils.assertMemoryLeak(() -> {
+            try {
+                circuitBreakerCallLimit = Integer.MAX_VALUE;
+                nCheckInterruptedCalls.set(0);
+                code.run();
+                engine.releaseInactive();
+                Assert.assertEquals("engine's busy writer count", 0, engine.getBusyWriterCount());
+                Assert.assertEquals("engine's busy reader count", 0, engine.getBusyReaderCount());
+                memoryRestrictedEngine.releaseInactive();
+                memoryRestrictedEngine.getTableSequencerAPI().close();
+                Assert.assertEquals("restricted engine's busy writer count", 0, memoryRestrictedEngine.getBusyWriterCount());
+                Assert.assertEquals("restricted engine's busy reader count", 0, memoryRestrictedEngine.getBusyReaderCount());
+            } finally {
+                engine.clear();
+                memoryRestrictedEngine.clear();
             }
         });
     }
@@ -906,23 +927,23 @@ public class SecurityTest extends AbstractGriffinTest {
         circuitBreakerCallLimit = max;
     }
 
-    protected static void assertMemoryLeak(TestUtils.LeakProneCode code) throws Exception {
-        TestUtils.assertMemoryLeak(() -> {
-            try {
-                circuitBreakerCallLimit = Integer.MAX_VALUE;
-                nCheckInterruptedCalls.set(0);
-                code.run();
-                engine.releaseInactive();
-                Assert.assertEquals("engine's busy writer count", 0, engine.getBusyWriterCount());
-                Assert.assertEquals("engine's busy reader count", 0, engine.getBusyReaderCount());
-                memoryRestrictedEngine.releaseInactive();
-                Assert.assertEquals("restricted engine's busy writer count", 0, memoryRestrictedEngine.getBusyWriterCount());
-                Assert.assertEquals("restricted engine's busy reader count", 0, memoryRestrictedEngine.getBusyReaderCount());
-            } finally {
-                engine.clear();
-                memoryRestrictedEngine.clear();
-            }
-        });
+    @Override
+    protected void assertQuery(SqlCompiler compiler,
+                               String expected,
+                               String query,
+                               String expectedTimestamp,
+                               boolean supportsRandomAccess,
+                               SqlExecutionContext sqlExecutionContext) throws SqlException {
+        memoryRestrictedEngine.getTableSequencerAPI().reopen();
+        assertQuery(
+                compiler,
+                expected,
+                query,
+                expectedTimestamp,
+                sqlExecutionContext,
+                supportsRandomAccess,
+                true,
+                false);
     }
 
 }
