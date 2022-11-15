@@ -60,7 +60,7 @@ public class TableSequencerAPI implements QuietCloseable {
         this.openSequencerInstanceLambda = this::openSequencerInstance;
         this.inactiveTtlUs = configuration.getInactiveWalWriterTTL() * 1000;
         this.recreateDistressedSequencerAttempts = configuration.getWalRecreateDistressedSequencerAttempts();
-        this.tableNameRegistry = new TableNameRegistry(configuration.mangleTableSystemNames());
+        this.tableNameRegistry = new TableNameRegistry();
         this.tableNameRegistry.reloadTableNameCache(configuration);
     }
 
@@ -69,6 +69,10 @@ public class TableSequencerAPI implements QuietCloseable {
         closed = true;
         releaseAll();
         Misc.free(tableNameRegistry);
+    }
+
+    public void deleteNonWalName(CharSequence tableName, String systemTableName) {
+        tableNameRegistry.deleteNonWalName(tableName, systemTableName);
     }
 
     public void deregisterTableName(CharSequence tableName, String systemTableName) {
@@ -98,7 +102,7 @@ public class TableSequencerAPI implements QuietCloseable {
         final FilesFacade ff = configuration.getFilesFacade();
         Path path = Path.PATH.get();
 
-        for (CharSequence systemTableName : tableNameRegistry.getTableSystemNames()) {
+        for (CharSequence systemTableName : getTableSystemNames()) {
             if (tableNameRegistry.isWalSystemTableName(systemTableName) || tableNameRegistry.isWalTableDropped(systemTableName)) {
                 long lastTxn;
                 int tableId;
@@ -210,6 +214,10 @@ public class TableSequencerAPI implements QuietCloseable {
 
     public TableNameRecord getTableNameRecord(final CharSequence tableName) {
         return tableNameRegistry.getTableNameRecord(tableName);
+    }
+
+    public Iterable<CharSequence> getTableSystemNames() {
+        return tableNameRegistry.getTableSystemNames();
     }
 
     @TestOnly
@@ -333,7 +341,7 @@ public class TableSequencerAPI implements QuietCloseable {
         tableNameRegistry.removeTableSystemName(systemTableName);
     }
 
-    public void rename(CharSequence tableName, CharSequence newTableName, String systemTableName) {
+    public void renameWalTable(CharSequence tableName, CharSequence newTableName, String systemTableName) {
         String newTableNameStr = tableNameRegistry.rename(tableName, newTableName, systemTableName);
         try (TableSequencerImpl tableSequencer = openSequencerLocked(systemTableName, SequencerLockType.WRITE)) {
             try {

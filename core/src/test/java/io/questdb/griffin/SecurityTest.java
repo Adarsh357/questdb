@@ -190,6 +190,8 @@ public class SecurityTest extends AbstractGriffinTest {
     public void testAlterTableDeniedOnNoWriteAccess() throws Exception {
         assertMemoryLeak(() -> {
             compiler.compile("create table balances(cust_id int, ccy symbol, balance double)", sqlExecutionContext);
+            memoryRestrictedEngine.getTableSequencerAPI().reopen();
+
             CompiledQuery cq = compiler.compile("insert into balances values (1, 'EUR', 140.6)", sqlExecutionContext);
             InsertOperation insertStatement = cq.getInsertOperation();
             try (InsertMethod method = insertStatement.createMethod(sqlExecutionContext)) {
@@ -229,6 +231,8 @@ public class SecurityTest extends AbstractGriffinTest {
             compiler.compile("create table tab as (select" +
                     " rnd_double(2) d" +
                     " from long_sequence(10000000))", sqlExecutionContext);
+            memoryRestrictedEngine.getTableSequencerAPI().reopen();
+
             try {
                 setMaxCircuitBreakerChecks(Long.MAX_VALUE);
                 circuitBreakerTimeoutDeadline = MicrosecondClockImpl.INSTANCE.getTicks() + Timestamps.SECOND_MICROS;
@@ -254,6 +258,8 @@ public class SecurityTest extends AbstractGriffinTest {
                     " rnd_double(2) d1," +
                     " timestamp_sequence(0, 1000000000) ts1" +
                     " from long_sequence(10000)) timestamp(ts1)", sqlExecutionContext);
+            memoryRestrictedEngine.getTableSequencerAPI().reopen();
+
             assertQuery(
                     memoryRestrictedCompiler,
                     "sum\n" +
@@ -353,11 +359,12 @@ public class SecurityTest extends AbstractGriffinTest {
     public void testDropTableDeniedOnNoWriteAccess() throws Exception {
         assertMemoryLeak(() -> {
             compiler.compile("create table balances(cust_id int, ccy symbol, balance double)", sqlExecutionContext);
+            memoryRestrictedEngine.getTableSequencerAPI().reopen();
             try {
                 compiler.compile("drop table balances", readOnlyExecutionContext);
                 Assert.fail();
             } catch (Exception ex) {
-                Assert.assertTrue(ex.toString().contains("permission denied"));
+                MatcherAssert.assertThat(ex.toString(), Matchers.containsString("permission denied"));
             }
             assertQuery("count\n0\n", "select count() from balances", null, false, true);
         });
@@ -367,6 +374,8 @@ public class SecurityTest extends AbstractGriffinTest {
     public void testInsertDeniedOnNoWriteAccess() throws Exception {
         assertMemoryLeak(() -> {
             compiler.compile("create table balances(cust_id int, ccy symbol, balance double)", sqlExecutionContext);
+            memoryRestrictedEngine.getTableSequencerAPI().reopen();
+
             assertQuery("count\n0\n", "select count() from balances", null, false, true);
 
             CompiledQuery cq = compiler.compile("insert into balances values (1, 'EUR', 140.6)", sqlExecutionContext);
@@ -706,6 +715,8 @@ public class SecurityTest extends AbstractGriffinTest {
     }
 
     protected static void assertMemoryLeak(TestUtils.LeakProneCode code) throws Exception {
+        memoryRestrictedEngine.releaseInactive();
+        memoryRestrictedEngine.getTableSequencerAPI().close();
         TestUtils.assertMemoryLeak(() -> {
             try {
                 circuitBreakerCallLimit = Integer.MAX_VALUE;

@@ -63,7 +63,7 @@ public class AbstractSqlParserTest extends AbstractGriffinTest {
                 TableModel tableModel = tableModels[i];
                 CharSequence systemTableName = engine.getSystemTableName(tableModel.getName());
                 Path path = tableModel.getPath().of(tableModel.getConfiguration().getRoot()).concat(systemTableName).slash$();
-                Assert.assertEquals(0, configuration.getFilesFacade().rmdir(path));
+                configuration.getFilesFacade().rmdir(path);
                 tableModel.close();
             }
         }
@@ -170,6 +170,7 @@ public class AbstractSqlParserTest extends AbstractGriffinTest {
     }
 
     protected static void assertSyntaxError(String query, int position, String contains, TableModel... tableModels) throws Exception {
+        engine.getTableSequencerAPI().reopen();
         AbstractSqlParserTest.assertSyntaxError(compiler, query, position, contains, tableModels);
     }
 

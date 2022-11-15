@@ -74,6 +74,11 @@ public class WalSqlExecutionContextImpl extends SqlExecutionContextImpl {
     }
 
     @Override
+    public String getTableNameAsString(CharSequence tableName) {
+        return getCairoEngine().getTableNameBySystemName(systemTableName);
+    }
+
+    @Override
     public int getStatus(Path path, CharSequence tableName, int lo, int hi) {
         return TABLE_EXISTS;
     }

@@ -50,14 +50,16 @@ public class TableNameRegistry implements Closeable {
     private final ConcurrentHashMap<TableNameRecord> systemTableNameCache = new ConcurrentHashMap<>();
     private final MemoryMARW tableNameMemory = Vm.getCMARWInstance();
 
-    public TableNameRegistry(boolean mangleDefaultTableNames) {
-    }
-
     @Override
     public void close() {
         systemTableNameCache.clear();
         reverseTableNameCache.clear();
         Misc.free(tableNameMemory);
+    }
+
+    public void deleteNonWalName(CharSequence tableName, String systemTableName) {
+        systemTableNameCache.remove(tableName);
+        reverseTableNameCache.remove(systemTableName);
     }
 
     public String getSystemName(CharSequence tableName) {
@@ -86,7 +88,7 @@ public class TableNameRegistry implements Closeable {
         return systemTableNameCache.get(tableName);
     }
 
-    public ConcurrentHashMap.KeySetView<String> getTableSystemNames() {
+    public Iterable<CharSequence> getTableSystemNames() {
         return reverseTableNameCache.keySet();
     }
 
@@ -125,12 +127,53 @@ public class TableNameRegistry implements Closeable {
 
     public synchronized void reloadTableNameCache(CairoConfiguration configuration) {
         LOG.info().$("reloading table to system name mappings").$();
-        final FilesFacade ff = configuration.getFilesFacade();
         systemTableNameCache.clear();
         reverseTableNameCache.clear();
 
         reloadFromFile(configuration);
         reloadFromRootDirectory(configuration);
+    }
+
+    public boolean removeName(CharSequence tableName, String systemTableName) {
+        TableNameRecord nameRecord = systemTableNameCache.get(tableName);
+        if (nameRecord != null && nameRecord.systemTableName.equals(systemTableName) && systemTableNameCache.remove(tableName, nameRecord)) {
+            removeEntry(tableName, systemTableName);
+            reverseTableNameCache.put(systemTableName, TABLE_DROPPED_MARKER);
+            return true;
+        }
+        return false;
+    }
+
+    public void removeTableSystemName(CharSequence systemTableName) {
+        reverseTableNameCache.remove(systemTableName);
+    }
+
+    public String rename(CharSequence oldName, CharSequence newName, String systemTableName) {
+        TableNameRecord tableRecord = systemTableNameCache.get(oldName);
+        String newTableNameStr = Chars.toString(newName);
+
+        if (systemTableNameCache.putIfAbsent(newTableNameStr, tableRecord) == null) {
+            removeEntry(oldName, systemTableName);
+            appendEntry(newName, systemTableName);
+            reverseTableNameCache.put(systemTableName, newTableNameStr);
+            systemTableNameCache.remove(oldName, tableRecord);
+            return newTableNameStr;
+        } else {
+            throw CairoException.nonCritical().put("table '").put(newName).put("' already exists");
+        }
+    }
+
+    @TestOnly
+    public void resetMemory(CairoConfiguration configuration) {
+        tableNameMemory.jumpTo(0L);
+        try (final Path path = Path.getThreadLocal(configuration.getRoot()).concat(TABLE_REGISTRY_NAME_FILE).$()) {
+            tableNameMemory.close();
+            tableNameMemory.smallFile(configuration.getFilesFacade(), path, MemoryTag.MMAP_TABLE_WAL_WRITER);
+        }
+    }
+
+    private synchronized void appendEntry(final CharSequence tableName, final CharSequence systemTableName) {
+        writeEntry(tableName, systemTableName, OPERATION_ADD);
     }
 
     private void reloadFromFile(CairoConfiguration configuration) {
@@ -206,48 +249,6 @@ public class TableNameRegistry implements Closeable {
             }
         } while (ff.findNext(findPtr) > 0);
         ff.findClose(findPtr);
-    }
-
-    public boolean removeName(CharSequence tableName, String systemTableName) {
-        TableNameRecord nameRecord = systemTableNameCache.get(tableName);
-        if (nameRecord != null && nameRecord.systemTableName.equals(systemTableName) && systemTableNameCache.remove(tableName, nameRecord)) {
-            removeEntry(tableName, systemTableName);
-            reverseTableNameCache.put(systemTableName, TABLE_DROPPED_MARKER);
-            return true;
-        }
-        return false;
-    }
-
-    public void removeTableSystemName(CharSequence systemTableName) {
-        reverseTableNameCache.remove(systemTableName);
-    }
-
-    public String rename(CharSequence oldName, CharSequence newName, String systemTableName) {
-        TableNameRecord tableRecord = systemTableNameCache.get(oldName);
-        String newTableNameStr = Chars.toString(newName);
-
-        if (systemTableNameCache.putIfAbsent(newTableNameStr, tableRecord) == null) {
-            removeEntry(oldName, systemTableName);
-            appendEntry(newName, systemTableName);
-            reverseTableNameCache.put(systemTableName, newTableNameStr);
-            systemTableNameCache.remove(oldName, tableRecord);
-            return newTableNameStr;
-        } else {
-            throw CairoException.nonCritical().put("table '").put(newName).put("' already exists");
-        }
-    }
-
-    @TestOnly
-    public void resetMemory(CairoConfiguration configuration) {
-        tableNameMemory.jumpTo(0L);
-        try (final Path path = Path.getThreadLocal(configuration.getRoot()).concat(TABLE_REGISTRY_NAME_FILE).$()) {
-            tableNameMemory.close();
-            tableNameMemory.smallFile(configuration.getFilesFacade(), path, MemoryTag.MMAP_TABLE_WAL_WRITER);
-        }
-    }
-
-    private synchronized void appendEntry(final CharSequence tableName, final CharSequence systemTableName) {
-        writeEntry(tableName, systemTableName, OPERATION_ADD);
     }
 
     private synchronized void removeEntry(final CharSequence tableName, final CharSequence systemTableName) {

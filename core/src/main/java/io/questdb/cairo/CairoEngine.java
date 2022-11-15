@@ -187,9 +187,9 @@ public class CairoEngine implements Closeable, WriterSource {
             if (null == lockedReason) {
                 boolean newTable = false;
                 try {
-                    if (getStatus(securityContext, path, tableName) != TableUtils.TABLE_DOES_NOT_EXIST) {
-                        // RESERVE is the same as if exists
-                        throw EntryUnavailableException.instance("table exists");
+                    int status = getStatus(securityContext, path, tableName);
+                    if (status == TableUtils.TABLE_RESERVED) {
+                        throw CairoException.nonCritical().put("name is reserved [table=").put(tableName).put(']');
                     }
                     tableNameStr = Chars.toString(tableName);
                     createTableUnsafe(
@@ -460,7 +460,7 @@ public class CairoEngine implements Closeable, WriterSource {
     public String getSystemTableName(final CharSequence tableName) {
         String systemTableName = tableSequencerAPI.getSystemName(tableName);
         if (systemTableName == null) {
-            throw CairoException.nonCritical().put("table does not exist");
+            throw CairoException.nonCritical().put("table does not exist [table=").put(tableName).put("]");
         }
         return systemTableName;
     }
@@ -475,7 +475,7 @@ public class CairoEngine implements Closeable, WriterSource {
         checkTableName(tableName);
         TableNameRecord tableNameRecord = tableSequencerAPI.getTableNameRecord(tableName);
         if (tableNameRecord == null) {
-            throw CairoException.nonCritical().put("table does not exist");
+            throw CairoException.nonCritical().put("table does not exist [table=").put(tableName).put("]");
         }
 
         if (!tableNameRecord.isWal) {
@@ -699,22 +699,27 @@ public class CairoEngine implements Closeable, WriterSource {
         checkTableName(newName);
 
         TableNameRecord tableNameRecord = tableSequencerAPI.getTableNameRecord(tableName);
-        if (tableNameRecord != null && tableNameRecord.isWal) {
-            // WAL table
-            tableSequencerAPI.rename(tableName, newName, Chars.toString(tableNameRecord.systemTableName));
-        } else {
-            String systemTableName = getSystemTableName(tableName);
-            String lockedReason = lock(securityContext, systemTableName, "renameTable");
-            if (null == lockedReason) {
-                try {
-                    rename0(path, tableName, otherPath, newName);
-                } finally {
-                    unlock(securityContext, tableName, null, false);
-                }
+        if (tableNameRecord != null) {
+            String systemTableName = Chars.toString(tableNameRecord.systemTableName);
+            if (tableNameRecord.isWal) {
+                tableSequencerAPI.renameWalTable(tableName, newName, systemTableName);
             } else {
-                LOG.error().$("cannot lock and rename [from='").$(tableName).$("', to='").$(newName).$("', reason='").$(lockedReason).$("']").$();
-                throw EntryUnavailableException.instance(lockedReason);
+                String lockedReason = lock(securityContext, systemTableName, "renameTable");
+                if (null == lockedReason) {
+                    try {
+                        rename0(path, tableNameRecord.systemTableName, tableName, otherPath, newName);
+                    } finally {
+                        unlock(securityContext, tableName, null, false);
+                    }
+                    tableSequencerAPI.deleteNonWalName(tableName, systemTableName);
+                } else {
+                    LOG.error().$("cannot lock and rename [from='").$(tableName).$("', to='").$(newName).$("', reason='").$(lockedReason).$("']").$();
+                    throw EntryUnavailableException.instance(lockedReason);
+                }
             }
+        } else {
+            LOG.error().$('\'').utf8(tableName).$("' does not exist. Rename failed.").$();
+            throw CairoException.nonCritical().put("Rename failed. Table '").put(tableName).put("' does not exist");
         }
     }
 
@@ -758,15 +763,9 @@ public class CairoEngine implements Closeable, WriterSource {
         }
     }
 
-    private void rename0(Path path, CharSequence tableName, Path otherPath, CharSequence to) {
+    private void rename0(Path path, String systemTableName, CharSequence tableName, Path otherPath, CharSequence to) {
         final FilesFacade ff = configuration.getFilesFacade();
         final CharSequence root = configuration.getRoot();
-
-        CharSequence systemTableName = getSystemTableName(tableName);
-        if (systemTableName == null || TableUtils.exists(ff, path, root, systemTableName) != TableUtils.TABLE_EXISTS) {
-            LOG.error().$('\'').utf8(tableName).$("' does not exist. Rename failed.").$();
-            throw CairoException.nonCritical().put("Rename failed. Table '").put(tableName).put("' does not exist");
-        }
 
         path.of(root).concat(systemTableName).$();
 
@@ -789,7 +788,7 @@ public class CairoEngine implements Closeable, WriterSource {
         } catch (Throwable ex) {
             if (dstFileName != null) {
                 // release the destination name
-                getTableSequencerAPI().deregisterTableName(to, dstFileName);
+                getTableSequencerAPI().deleteNonWalName(to, dstFileName);
             }
             throw ex;
         }

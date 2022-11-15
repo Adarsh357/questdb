@@ -39,6 +39,9 @@ public class CairoTestUtils {
     public static void create(TableModel model, CairoEngine engine) {
         int tableId = 1;
         String systemTableName = engine.getTableSequencerAPI().registerTableName(model.getTableName(), tableId, false);
+        if (systemTableName == null) {
+            throw new RuntimeException("table already exists: " + model.getTableName());
+        }
         TableUtils.createTable(
                 model.getConfiguration(),
                 model.getMem(),
@@ -90,21 +93,31 @@ public class CairoTestUtils {
     }
 
     public static void createTestTable(CairoEngine engine, int n, Rnd rnd, TestRecord.ArrayBinarySequence binarySequence) {
-        try (TableModel model = new TableModel(engine.getConfiguration(), "x", PartitionBy.NONE)) {
-            model
-                    .col("a", ColumnType.BYTE)
-                    .col("b", ColumnType.SHORT)
-                    .col("c", ColumnType.INT)
-                    .col("d", ColumnType.LONG)
-                    .col("e", ColumnType.DATE)
-                    .col("f", ColumnType.TIMESTAMP)
-                    .col("g", ColumnType.FLOAT)
-                    .col("h", ColumnType.DOUBLE)
-                    .col("i", ColumnType.STRING)
-                    .col("j", ColumnType.SYMBOL)
-                    .col("k", ColumnType.BOOLEAN)
-                    .col("l", ColumnType.BINARY);
-            create(model, engine);
+        try {
+            try (TableModel model = new TableModel(engine.getConfiguration(), "x", PartitionBy.NONE)) {
+                model
+                        .col("a", ColumnType.BYTE)
+                        .col("b", ColumnType.SHORT)
+                        .col("c", ColumnType.INT)
+                        .col("d", ColumnType.LONG)
+                        .col("e", ColumnType.DATE)
+                        .col("f", ColumnType.TIMESTAMP)
+                        .col("g", ColumnType.FLOAT)
+                        .col("h", ColumnType.DOUBLE)
+                        .col("i", ColumnType.STRING)
+                        .col("j", ColumnType.SYMBOL)
+                        .col("k", ColumnType.BOOLEAN)
+                        .col("l", ColumnType.BINARY);
+                create(model, engine);
+            }
+        } catch (RuntimeException e) {
+            if ("table already exists: x".equals(e.getMessage())) {
+                try (TableWriter writer = new TableWriter(engine.getConfiguration(), "x", engine.getSystemTableName("x"), Metrics.disabled())) {
+                    writer.truncate();
+                }
+            } else {
+                throw e;
+            }
         }
 
         try (TableWriter writer = new TableWriter(engine.getConfiguration(), "x", engine.getSystemTableName("x"), Metrics.disabled())) {
