@@ -390,7 +390,7 @@ public class O3PartitionPurgeJob extends AbstractQueueConsumerJob<O3PartitionPur
                 fileNameSinks[workerId],
                 partitionList.get(workerId),
                 configuration.getRoot(),
-                task.getTableName(),
+                task.getTableToken(),
                 txnScoreboards.get(workerId),
                 txnReaders.get(workerId),
                 task.getPartitionBy()

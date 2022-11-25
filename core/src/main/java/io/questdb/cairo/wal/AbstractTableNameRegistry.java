@@ -25,6 +25,8 @@
 package io.questdb.cairo.wal;
 
 import io.questdb.cairo.CairoConfiguration;
+import io.questdb.cairo.TableNameRegistry;
+import io.questdb.cairo.TableToken;
 import io.questdb.std.Misc;
 
 import java.util.Map;
@@ -32,8 +34,8 @@ import java.util.Map;
 public abstract class AbstractTableNameRegistry implements TableNameRegistry {
     protected static final String TABLE_DROPPED_MARKER = "TABLE_DROPPED_MARKER:..";
     protected final TableNameRegistryFileStore tableNameStore;
-    private Map<CharSequence, String> reverseTableNameCache;
-    private Map<CharSequence, TableNameRecord> systemTableNameCache;
+    private Map<TableToken, String> reverseTableNameCache;
+    private Map<CharSequence, TableToken> systemTableNameCache;
 
     public AbstractTableNameRegistry(CairoConfiguration configuration) {
         this.tableNameStore = new TableNameRegistryFileStore(configuration);
@@ -47,13 +49,12 @@ public abstract class AbstractTableNameRegistry implements TableNameRegistry {
     }
 
     @Override
-    public String getSystemName(CharSequence tableName) {
-        TableNameRecord nameRecord = getTableNameRecord(tableName);
-        return nameRecord != null ? nameRecord.systemTableName : null;
+    public TableToken getSystemName(CharSequence tableName) {
+        return systemTableNameCache.get(tableName);
     }
 
     @Override
-    public String getTableNameBySystemName(CharSequence systemTableName) {
+    public String getTableNameBySystemName(TableToken systemTableName) {
         String tableName = reverseTableNameCache.get(systemTableName);
 
         //noinspection StringEquality
@@ -65,34 +66,20 @@ public abstract class AbstractTableNameRegistry implements TableNameRegistry {
     }
 
     @Override
-    public TableNameRecord getTableNameRecord(CharSequence tableName) {
-        return systemTableNameCache.get(tableName);
-    }
-
-    @Override
-    public Iterable<CharSequence> getTableSystemNames() {
+    public Iterable<TableToken> getTableSystemNames() {
         return reverseTableNameCache.keySet();
     }
 
     @Override
-    public boolean isWalSystemTableName(CharSequence systemTableName) {
-        String tableName = reverseTableNameCache.get(systemTableName);
-        if (tableName != null) {
-            return isWalTableName(tableName);
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isWalTableDropped(CharSequence systemTableName) {
+    public boolean isWalTableDropped(TableToken systemTableName) {
         //noinspection StringEquality
         return reverseTableNameCache.get(systemTableName) == TABLE_DROPPED_MARKER;
     }
 
     @Override
     public boolean isWalTableName(CharSequence tableName) {
-        TableNameRecord nameRecord = systemTableNameCache.get(tableName);
-        return nameRecord != null && nameRecord.isWal;
+        TableToken nameRecord = systemTableNameCache.get(tableName);
+        return nameRecord != null && nameRecord.isWal();
     }
 
     @Override
@@ -101,8 +88,8 @@ public abstract class AbstractTableNameRegistry implements TableNameRegistry {
     }
 
     public void setNameMaps(
-            Map<CharSequence, TableNameRecord> systemTableNameCache,
-            Map<CharSequence, String> reverseTableNameCache) {
+            Map<CharSequence, TableToken> systemTableNameCache,
+            Map<TableToken, String> reverseTableNameCache) {
         this.systemTableNameCache = systemTableNameCache;
         this.reverseTableNameCache = reverseTableNameCache;
     }

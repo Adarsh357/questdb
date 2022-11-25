@@ -1401,10 +1401,9 @@ public class SqlCompiler implements Closeable {
 
         try {
             if (!isWalEnabled) {
-                CharSequence systemTableName = engine.getSystemTableName(tableName);
+                TableToken systemTableName = engine.getSystemTableName(tableName);
                 writerAPI = writer = new TableWriter(
                         configuration,
-                        tableName,
                         systemTableName,
                         messageBus,
                         null,
@@ -1752,7 +1751,7 @@ public class SqlCompiler implements Closeable {
         tableExistsOrFail(name.position, name.token, executionContext);
 
         ObjList<Function> valueFunctions = null;
-        String systemTableName = engine.getSystemTableName(name.token);
+        TableToken systemTableName = engine.getSystemTableName(name.token);
         try (TableRecordMetadata metadata = engine.getMetadata(
                 executionContext.getCairoSecurityContext(),
                 systemTableName
@@ -2120,8 +2119,8 @@ public class SqlCompiler implements Closeable {
         }
         tableExistsOrFail(lexer.lastTokenPosition(), tok, executionContext);
         CharSequence tableName = tok;
-        CharSequence systemTableName = engine.getSystemTableName(tableName);
-        rebuildIndex.of(path.of(configuration.getRoot()).concat(systemTableName), configuration);
+        TableToken systemTableName = engine.getSystemTableName(tableName);
+        rebuildIndex.of(path.of(configuration.getRoot()).concat(systemTableName.getPrivateTableName()), configuration);
 
         tok = SqlUtil.fetchNext(lexer);
         CharSequence columnName = null;
@@ -2168,8 +2167,8 @@ public class SqlCompiler implements Closeable {
 
     private boolean removeTableDirectory(CreateTableModel model) {
         int errno;
-        CharSequence systemTableName = engine.getSystemTableName(model.getName().token);
-        if ((errno = engine.removeDirectory(path, systemTableName)) == 0) {
+        TableToken systemTableName = engine.getSystemTableName(model.getName().token);
+        if ((errno = engine.removeDirectory(path, systemTableName.getPrivateTableName())) == 0) {
             return true;
         }
         LOG.error()
@@ -2375,19 +2374,20 @@ public class SqlCompiler implements Closeable {
             for (int i = 0, n = tableWriters.size(); i < n; i++) {
                 try (TableWriterAPI writer = tableWriters.getQuick(i)) {
                     try {
+                        String publicTableName = engine.getTableNameBySystemName(writer.getTableToken());
                         if (writer.getMetadata().isWalEnabled()) {
                             writer.truncate();
-                        } else if (engine.lockReaders(writer.getTableName())) {
+                        } else if (engine.lockReaders(publicTableName)) {
                             try {
                                 writer.truncate();
                             } finally {
-                                engine.unlockReaders(writer.getTableName());
+                                engine.unlockReaders(publicTableName);
                             }
                         } else {
-                            throw SqlException.$(0, "there is an active query against '").put(writer.getTableName()).put("'. Try again.");
+                            throw SqlException.$(0, "there is an active query against '").put(publicTableName).put("'. Try again.");
                         }
                     } catch (CairoException | CairoError e) {
-                        LOG.error().$("could not truncate [table=").$(writer.getTableName()).$(", e=").$((Sinkable) e).$(']').$();
+                        LOG.error().$("could not truncate [table=").$(writer.getTableToken()).$(", e=").$((Sinkable) e).$(']').$();
                         throw e;
                     }
                 }
@@ -2784,7 +2784,7 @@ public class SqlCompiler implements Closeable {
             }
 
             int renameRootLen = dstPath.length();
-            CharSequence systemTableName = engine.getSystemTableName(tableName);
+            TableToken systemTableName = engine.getSystemTableName(tableName);
             try {
                 CairoSecurityContext securityContext = executionContext.getCairoSecurityContext();
                 try (TableReader reader = executionContext.getReader(tableName)) {
@@ -2810,9 +2810,9 @@ public class SqlCompiler implements Closeable {
                         backupWriter.commit();
                     }
                 }
-                srcPath.of(configuration.getBackupRoot()).concat(configuration.getBackupTempDirName()).concat(systemTableName).$();
+                srcPath.of(configuration.getBackupRoot()).concat(configuration.getBackupTempDirName()).concat(systemTableName.getPrivateTableName()).$();
                 try {
-                    dstPath.trimTo(renameRootLen).concat(systemTableName).$();
+                    dstPath.trimTo(renameRootLen).concat(systemTableName.getPrivateTableName()).$();
                     TableUtils.renameOrFail(ff, srcPath, dstPath);
                     LOG.info().$("backup complete [table=").$(tableName).$(", to=").$(dstPath).$(']').$();
                 } finally {
@@ -2825,7 +2825,7 @@ public class SqlCompiler implements Closeable {
                         .$(", errno=").$(e.getErrno())
                         .$(']').$();
 
-                srcPath.of(cachedTmpBackupRoot).concat(systemTableName).slash$();
+                srcPath.of(cachedTmpBackupRoot).concat(systemTableName.getPrivateTableName()).slash$();
                 int errno;
                 if ((errno = ff.rmdir(srcPath)) != 0) {
                     LOG.error().$("could not delete directory [path=").$(srcPath).$(", errno=").$(errno).$(']').$();
@@ -2843,8 +2843,8 @@ public class SqlCompiler implements Closeable {
         }
 
         private void cloneMetaData(CharSequence tableName, CharSequence backupRoot, int mkDirMode, TableReader reader) {
-            CharSequence systemTableName = engine.getSystemTableName(tableName);
-            srcPath.of(backupRoot).concat(systemTableName).slash$();
+            TableToken systemTableName = engine.getSystemTableName(tableName);
+            srcPath.of(backupRoot).concat(systemTableName.getPublicTableName()).slash$();
 
             if (ff.exists(srcPath)) {
                 throw CairoException.nonCritical().put("Backup dir for table \"").put(tableName).put("\" already exists [dir=").put(srcPath).put(']');

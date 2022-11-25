@@ -22,14 +22,47 @@
  *
  ******************************************************************************/
 
-package io.questdb.cairo.wal;
+package io.questdb.cairo;
 
-public class TableNameRecord {
-    public final boolean isWal;
-    public final String systemTableName;
+public class TableToken {
+    private final boolean isWal;
+    private final String privateTableName;
+    private final String publicTableName;
+    private final int tableId;
 
-    TableNameRecord(String systemTableName, boolean isWal) {
+    public TableToken(String publicTableName, String privateTableName, int tableId, boolean isWal) {
+        this.publicTableName = publicTableName;
+        this.privateTableName = privateTableName;
+        this.tableId = tableId;
         this.isWal = isWal;
-        this.systemTableName = systemTableName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TableToken that = (TableToken) o;
+        return tableId == that.tableId;
+    }
+
+    public String getPrivateTableName() {
+        return privateTableName;
+    }
+
+    public String getPublicTableName() {
+        return publicTableName;
+    }
+
+    public int getTableId() {
+        return tableId;
+    }
+
+    @Override
+    public int hashCode() {
+        return tableId;
+    }
+
+    public boolean isWal() {
+        return isWal;
     }
 }

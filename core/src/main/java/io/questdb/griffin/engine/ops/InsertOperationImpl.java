@@ -25,6 +25,7 @@
 package io.questdb.griffin.engine.ops;
 
 import io.questdb.cairo.CairoEngine;
+import io.questdb.cairo.TableToken;
 import io.questdb.cairo.TableWriterAPI;
 import io.questdb.cairo.pool.WriterSource;
 import io.questdb.cairo.sql.InsertMethod;
@@ -44,13 +45,13 @@ public class InsertOperationImpl implements InsertOperation {
     private final InsertMethodImpl insertMethod = new InsertMethodImpl();
     private final ObjList<InsertRowImpl> insertRows = new ObjList<>();
     private final long structureVersion;
-    private final String systemTableName;
+    private final TableToken systemTableName;
     private final String tableName;
 
     public InsertOperationImpl(
             CairoEngine engine,
             String tableName,
-            String systemTableName,
+            TableToken systemTableName,
             long structureVersion
     ) {
         this.engine = engine;
@@ -69,7 +70,7 @@ public class InsertOperationImpl implements InsertOperation {
         initContext(executionContext);
         if (insertMethod.writer == null) {
             final TableWriterAPI writer = writerSource.getTableWriterAPI(executionContext.getCairoSecurityContext(), tableName, "insert");
-            if (writer.getStructureVersion() != structureVersion || !Chars.equals(systemTableName, writer.getSystemTableName())) {
+            if (writer.getStructureVersion() != structureVersion || Chars.equals(systemTableName.getPublicTableName(), writer.getTableToken().getPublicTableName())) {
                 writer.close();
                 throw WriterOutOfDateException.INSTANCE;
             }

@@ -148,7 +148,8 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
     private final TxReader slaveTxReader;
     private final ObjList<MapWriter> symbolMapWriters;
     private final IntList symbolRewriteMap = new IntList();
-    private final String systemTableName;
+    private String tableName;
+    private TableToken tableToken;
     private final MemoryMARW todoMem = Vm.getMARWInstance();
     private final TxWriter txWriter;
     private final FindVisitor removePartitionDirsNotAttached = this::removePartitionDirsNotAttached;
@@ -205,7 +206,6 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
     private boolean performRecovery;
     private boolean removeDirOnCancelRow = true;
     private int rowAction = ROW_ACTION_OPEN_PARTITION;
-    private String tableName;
     private long tempMem16b = Unsafe.malloc(16, MemoryTag.NATIVE_TABLE_WRITER);
     private LongConsumer timestampSetter;
     private long todoTxn;
@@ -216,8 +216,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
 
     public TableWriter(
             CairoConfiguration configuration,
-            CharSequence tableName,
-            CharSequence systemTableName,
+            TableToken tableToken,
             MessageBus messageBus,
             MessageBus ownMessageBus,
             boolean lock,
@@ -225,6 +224,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
             CharSequence root,
             Metrics metrics
     ) {
+        this.tableName = tableToken.getPublicTableName();
         LOG.info().$("open '").utf8(tableName).$('\'').$();
         this.configuration = configuration;
         this.directIOFlag = (Os.type != Os.WINDOWS || configuration.getWriterFileOpenOpts() != CairoConfiguration.O_NONE);
@@ -241,12 +241,11 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
         this.ff = configuration.getFilesFacade();
         this.mkDirMode = configuration.getMkDirMode();
         this.fileOperationRetryCount = configuration.getFileOperationRetryCount();
-        this.tableName = Chars.toString(tableName);
-        this.systemTableName = Chars.toString(systemTableName);
+        this.tableToken = tableToken;
         this.o3QuickSortEnabled = configuration.isO3QuickSortEnabled();
         this.o3ColumnMemorySize = configuration.getO3ColumnMemorySize();
-        this.path = new Path().of(root).concat(systemTableName);
-        this.other = new Path().of(root).concat(systemTableName);
+        this.path = new Path().of(root).concat(tableToken.getPrivateTableName());
+        this.other = new Path().of(root).concat(tableToken.getPrivateTableName());
         this.rootLen = path.length();
         try {
             if (lock) {
@@ -263,7 +262,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
             this.columnVersionWriter = openColumnVersionFile(ff, path, rootLen);
 
             openMetaFile(ff, path, rootLen, metaMem);
-            this.metadata = new TableWriterMetadata(this.systemTableName, metaMem);
+            this.metadata = new TableWriterMetadata(this.tableToken, metaMem);
             this.partitionBy = metaMem.getInt(META_OFFSET_PARTITION_BY);
             this.txWriter = new TxWriter(ff).ofRW(path.concat(TXN_FILE_NAME).$(), partitionBy);
             this.txnScoreboard = new TxnScoreboard(ff, configuration.getTxnScoreboardEntryCount()).ofRW(path.trimTo(rootLen));
@@ -334,26 +333,21 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
     }
 
     @TestOnly
-    public TableWriter(CairoConfiguration configuration, CharSequence tableName, CharSequence systemTableName, Metrics metrics) {
-        this(configuration, tableName, systemTableName, null, new MessageBusImpl(configuration), true, DefaultLifecycleManager.INSTANCE, configuration.getRoot(), metrics);
-    }
-
-    @TestOnly
-    public TableWriter(CairoConfiguration configuration, CharSequence tableName, CharSequence systemTableName, @NotNull MessageBus messageBus, Metrics metrics) {
-        this(configuration, tableName, systemTableName, messageBus, true, DefaultLifecycleManager.INSTANCE, metrics);
+    public TableWriter(CairoConfiguration configuration, TableToken tableToken, Metrics metrics) {
+        this(configuration, tableToken, null, new MessageBusImpl(configuration), true, DefaultLifecycleManager.INSTANCE, configuration.getRoot(), metrics);
     }
 
     @TestOnly
     TableWriter(
             CairoConfiguration configuration,
             CharSequence tableName,
-            CharSequence systemTableName,
+            TableToken tableToken,
             @NotNull MessageBus messageBus,
             boolean lock,
             LifecycleManager lifecycleManager,
             Metrics metrics
     ) {
-        this(configuration, tableName, systemTableName, messageBus, null, lock, lifecycleManager, configuration.getRoot(), metrics);
+        this(configuration, tableToken, messageBus, null, lock, lifecycleManager, configuration.getRoot(), metrics);
     }
 
     public static int getPrimaryColumnIndex(int index) {
@@ -670,7 +664,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
             return AttachDetachStatus.ATTACH_ERR_DIR_EXISTS;
         }
 
-        Path detachedPath = Path.PATH.get().of(configuration.getRoot()).concat(systemTableName);
+        Path detachedPath = Path.PATH.get().of(configuration.getRoot()).concat(tableToken.getPrivateTableName());
         setPathForPartition(detachedPath, partitionBy, timestamp, false);
         detachedPath.put(configuration.getAttachPartitionSuffix()).$();
         int detachedRootLen = detachedPath.length();
@@ -780,10 +774,11 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
         updateMetaStructureVersion();
     }
 
-    public void changeTableName(long seqTxn, String tableName) {
+    public void changeTableName(long seqTxn, TableToken tableToken) {
         // This is change of the logical name of WAL table used for logging.
         // System Table Name and all paths remains the same.
-        this.tableName = tableName;
+        this.tableName = tableToken.getPublicTableName();
+        this.tableToken = tableToken;
         markSeqTxnCommitted(seqTxn);
     }
 
@@ -825,7 +820,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
     public void destroy() {
         // Closes all the files and makes this instance unusable e.g. it cannot return to the pool on close.
         LOG.info().$("closing table files [table=").utf8(tableName)
-                .$(", systemTableName=").utf8(systemTableName).I$();
+                .$(", systemTableName=").utf8(tableToken.getPrivateTableName()).I$();
         distressed = true;
         doClose(false);
     }
@@ -875,7 +870,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
                 LOG.info().$("detaching partition via unlink [path=").$(path).I$();
             } else {
 
-                detachedPath.of(configuration.getRoot()).concat(systemTableName);
+                detachedPath.of(configuration.getRoot()).concat(tableToken.getPrivateTableName());
                 int detachedRootLen = detachedPath.length();
                 // detachedPath: detached partition folder
                 if (!ff.exists(detachedPath.slash$())) {
@@ -1153,8 +1148,8 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
     }
 
     @Override
-    public String getSystemTableName() {
-        return systemTableName;
+    public TableToken getTableToken() {
+        return tableToken;
     }
 
     @Override
@@ -2294,7 +2289,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
             if (attachMetadata == null) {
                 attachMetaMem = Vm.getCMRInstance();
                 attachMetaMem.smallFile(ff, detachedPath, MemoryTag.MMAP_TABLE_WRITER);
-                attachMetadata = new TableWriterMetadata(systemTableName, attachMetaMem);
+                attachMetadata = new TableWriterMetadata(tableToken, attachMetaMem);
             } else {
                 attachMetaMem.smallFile(ff, detachedPath, MemoryTag.MMAP_TABLE_WRITER);
                 attachMetadata.reload(attachMetaMem);
@@ -4756,7 +4751,7 @@ public class TableWriter implements TableWriterAPI, MetadataChangeSPI, Closeable
         if (scheduleAsyncPurge) {
             // Any more complicated case involve looking at what folders are present on disk before removing
             // do it async in O3PartitionPurgeJob
-            if (schedulePurgeO3Partitions(messageBus, systemTableName, partitionBy)) {
+            if (schedulePurgeO3Partitions(messageBus, tableToken, partitionBy)) {
                 LOG.info().$("scheduled to purge partitions [table=").utf8(tableName).I$();
             } else {
                 LOG.error().$("could not queue for purge, queue is full [table=").utf8(tableName).I$();

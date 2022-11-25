@@ -47,7 +47,7 @@ public class SequencerMetadata extends AbstractRecordMetadata implements TableRe
     private final MemoryMR roMetaMem;
     private final AtomicLong structureVersion = new AtomicLong(-1);
     private volatile boolean suspended;
-    private String systemTableName;
+    private TableToken systemTableName;
     private int tableId;
 
     public SequencerMetadata(FilesFacade ff) {
@@ -79,7 +79,7 @@ public class SequencerMetadata extends AbstractRecordMetadata implements TableRe
         Misc.free(roMetaMem);
     }
 
-    public void copyFrom(TableDescriptor model, String systemTableName, int tableId, long structureVersion, boolean suspended) {
+    public void copyFrom(TableDescriptor model, TableToken systemTableName, int tableId, long structureVersion, boolean suspended) {
         reset();
         this.systemTableName = systemTableName;
         this.timestampIndex = model.getTimestampIndex();
@@ -96,7 +96,7 @@ public class SequencerMetadata extends AbstractRecordMetadata implements TableRe
         columnCount = columnMetadata.size();
     }
 
-    public void create(TableDescriptor model, String systemTableName, Path path, int pathLen, int tableId) {
+    public void create(TableDescriptor model, TableToken systemTableName, Path path, int pathLen, int tableId) {
         copyFrom(model, systemTableName, tableId, 0, false);
         switchTo(path, pathLen);
     }
@@ -116,7 +116,7 @@ public class SequencerMetadata extends AbstractRecordMetadata implements TableRe
     }
 
     @Override
-    public String getSystemTableName() {
+    public TableToken getSystemTableName() {
         return systemTableName;
     }
 

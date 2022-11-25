@@ -1245,7 +1245,7 @@ public class PGConnectionContext extends AbstractMutableIOContext<PGConnectionCo
                     try {
                         rowCount = m.execute();
                         writer = m.popWriter();
-                        pendingWriters.put(writer.getSystemTableName(), writer);
+                        pendingWriters.put(writer.getTableToken(), writer);
                     } catch (Throwable e) {
                         Misc.free(m);
                         throw e;

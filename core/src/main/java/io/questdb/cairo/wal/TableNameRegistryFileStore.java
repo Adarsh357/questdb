@@ -26,6 +26,7 @@ package io.questdb.cairo.wal;
 
 import io.questdb.cairo.CairoConfiguration;
 import io.questdb.cairo.CairoException;
+import io.questdb.cairo.TableToken;
 import io.questdb.cairo.TableUtils;
 import io.questdb.cairo.vm.Vm;
 import io.questdb.cairo.vm.api.MemoryMARW;
@@ -54,7 +55,7 @@ public class TableNameRegistryFileStore implements Closeable {
         this.configuration = configuration;
     }
 
-    public synchronized void appendEntry(final CharSequence tableName, final CharSequence systemTableName) {
+    public synchronized void appendEntry(final CharSequence tableName, final TableToken systemTableName) {
         writeEntry(tableName, systemTableName, OPERATION_ADD);
     }
 
@@ -77,8 +78,8 @@ public class TableNameRegistryFileStore implements Closeable {
     }
 
     public void reload(
-            Map<CharSequence, TableNameRecord> systemTableNameCache,
-            Map<CharSequence, String> reverseTableNameCache,
+            Map<CharSequence, TableToken> systemTableNameCache,
+            Map<TableToken, String> reverseTableNameCache,
             String droppedMarker
     ) {
         FilesFacade ff = configuration.getFilesFacade();
@@ -131,8 +132,8 @@ public class TableNameRegistryFileStore implements Closeable {
     }
 
     public void reloadFromRootDirectory(
-            Map<CharSequence, TableNameRecord> systemTableNameCache,
-            Map<CharSequence, String> reverseTableNameCache
+            Map<CharSequence, TableToken> systemTableNameCache,
+            Map<TableToken, String> reverseTableNameCache
     ) {
         Path path = Path.getThreadLocal(configuration.getRoot());
         FilesFacade ff = configuration.getFilesFacade();
@@ -157,7 +158,7 @@ public class TableNameRegistryFileStore implements Closeable {
         ff.findClose(findPtr);
     }
 
-    public synchronized void removeEntry(final CharSequence tableName, final CharSequence systemTableName) {
+    public synchronized void removeEntry(final CharSequence tableName, final TableToken systemTableName) {
         writeEntry(tableName, systemTableName, OPERATION_REMOVE);
     }
 
@@ -178,7 +179,7 @@ public class TableNameRegistryFileStore implements Closeable {
         return lockFd != -1;
     }
 
-    private void writeEntry(CharSequence tableName, CharSequence systemTableName, int operation) {
+    private void writeEntry(CharSequence tableName, TableToken systemTableName, int operation) {
         if (!isLocked()) {
             throw CairoException.critical(0).put("table registry is not locked");
         }

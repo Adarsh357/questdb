@@ -697,7 +697,7 @@ public class SymbolCacheTest extends AbstractGriffinTest {
         }
 
         @Override
-        public String getSystemTableName() {
+        public String getTableToken() {
             return null;
         }
 

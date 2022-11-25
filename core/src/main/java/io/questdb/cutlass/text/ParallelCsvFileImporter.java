@@ -131,7 +131,7 @@ public class ParallelCsvFileImporter implements Closeable, Mutable {
     private final Consumer<TextImportTask> collectDataImportStatsRef = this::collectDataImportStats;
     private final Consumer<TextImportTask> collectIndexStatsRef = this::collectIndexStats;
     private PhaseStatusReporter statusReporter;
-    private CharSequence systemTableName;
+    private TableToken systemTableName;
     //input params start
     private CharSequence tableName;
     private boolean targetTableCreated;
@@ -295,7 +295,7 @@ public class ParallelCsvFileImporter implements Closeable, Mutable {
         this.circuitBreaker = circuitBreaker;
         this.tableName = tableName;
         this.systemTableName = cairoEngine.getOrCreateSystemTableName(tableName, false);
-        this.importRoot = tmpPath.of(inputWorkRoot).concat(systemTableName).toString();
+        this.importRoot = tmpPath.of(inputWorkRoot).concat(systemTableName.getPrivateTableName()).toString();
         this.inputFileName = inputFileName;
         this.timestampColumn = timestampColumn;
         this.partitionBy = partitionBy;
@@ -613,8 +613,8 @@ public class ParallelCsvFileImporter implements Closeable, Mutable {
                 int lo = taskDistribution.getQuick(i * 3 + 1);
                 int hi = taskDistribution.getQuick(i * 3 + 2);
 
-                final Path srcPath = localImportJob.getTmpPath1().of(importRoot).concat(systemTableName).put('_').put(index);
-                final Path dstPath = localImportJob.getTmpPath2().of(configuration.getRoot()).concat(systemTableName);
+                final Path srcPath = localImportJob.getTmpPath1().of(importRoot).concat(systemTableName.getPrivateTableName()).put('_').put(index);
+                final Path dstPath = localImportJob.getTmpPath2().of(configuration.getRoot()).concat(systemTableName.getPrivateTableName());
 
                 final int srcPlen = srcPath.length();
                 final int dstPlen = dstPath.length();
@@ -947,8 +947,8 @@ public class ParallelCsvFileImporter implements Closeable, Mutable {
         int collectedCount = 0;
         for (int t = 0; t < tmpTableCount; ++t) {
 
-            CharSequence systemTableName = cairoEngine.getSystemTableName(tableName);
-            tmpPath.of(importRoot).concat(systemTableName).put('_').put(t);
+            TableToken systemTableName = cairoEngine.getSystemTableName(tableName);
+            tmpPath.of(importRoot).concat(systemTableName.getPrivateTableName()).put('_').put(t);
 
             try (TxReader txFile = new TxReader(ff).ofRO(tmpPath.concat(TXN_FILE_NAME).$(), partitionBy)) {
                 txFile.unsafeLoadAll();
@@ -1373,14 +1373,15 @@ public class ParallelCsvFileImporter implements Closeable, Mutable {
 
                     validate(names, types, null, NO_INDEX);
                     targetTableStructure.of(tableName, names, types, timestampIndex, partitionBy);
-                    int tableId = (int) cairoEngine.getTableIdGenerator().getNextId();
+                    TableToken newTable = cairoEngine.registerTableName(tableName, false);
+
                     createTable(
                             ff,
                             configuration.getMkDirMode(),
                             configuration.getRoot(),
-                            cairoEngine.getSystemTableName(tableName),
+                            cairoEngine.getSystemTableName(tableName).getPrivateTableName(),
                             targetTableStructure,
-                            tableId
+                            newTable.getTableId()
                     );
                     targetTableCreated = true;
                     writer = cairoEngine.getWriter(cairoSecurityContext, tableName, LOCK_REASON);

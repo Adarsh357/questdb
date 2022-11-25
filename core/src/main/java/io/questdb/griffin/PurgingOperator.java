@@ -130,7 +130,7 @@ public abstract class PurgingOperator {
                 // if anything not purged, schedule async purge
                 if (cleanupColumnVersionsAsync.size() > 0) {
                     purgeColumnVersionAsync(
-                            tableWriter.getSystemTableName(),
+                            tableWriter.getTableToken(),
                             columnName,
                             tableMetadata.getTableId(),
                             (int) tableWriter.getTruncateVersion(),
@@ -155,7 +155,7 @@ public abstract class PurgingOperator {
     }
 
     private void purgeColumnVersionAsync(
-            String tableName,
+            TableToken tableName,
             CharSequence columnName,
             int tableId,
             int tableTruncateVersion,

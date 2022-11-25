@@ -66,7 +66,7 @@ public class TableReader implements Closeable, SymbolTableSource {
     private final TableReaderRecordCursor recordCursor = new TableReaderRecordCursor();
     private final int rootLen;
     private final ObjList<SymbolMapReader> symbolMapReaders = new ObjList<>();
-    private final String systemTableName;
+    private final TableToken systemTableName;
     private final String tableName;
     private final MemoryMR todoMem = Vm.getMRInstance();
     private final TxReader txFile;
@@ -82,23 +82,22 @@ public class TableReader implements Closeable, SymbolTableSource {
     private long txn = TableUtils.INITIAL_TXN;
     private boolean txnAcquired = false;
 
-    public TableReader(CairoConfiguration configuration, String tableName, String systemTableName) {
-        this(configuration, tableName, systemTableName, null);
+    public TableReader(CairoConfiguration configuration, TableToken systemTableName) {
+        this(configuration, systemTableName, null);
     }
 
     public TableReader(CairoConfiguration configuration,
-                       String tableName,
-                       String systemTableName,
+                       TableToken systemTableName,
                        @Nullable MessageBus messageBus
     ) {
         this.configuration = configuration;
         this.clock = configuration.getMillisecondClock();
         this.ff = configuration.getFilesFacade();
-        this.systemTableName = Chars.toString(systemTableName);
-        this.tableName = Chars.toString(tableName);
+        this.systemTableName = systemTableName;
+        this.tableName = systemTableName.getPublicTableName();
         this.messageBus = messageBus;
         this.path = new Path();
-        this.path.of(configuration.getRoot()).concat(this.systemTableName);
+        this.path.of(configuration.getRoot()).concat(this.systemTableName.getPrivateTableName());
         this.rootLen = path.length();
         path.trimTo(rootLen);
         try {
@@ -111,7 +110,7 @@ public class TableReader implements Closeable, SymbolTableSource {
             LOG.debug()
                     .$("open [id=").$(metadata.getTableId())
                     .$(", table=").utf8(this.tableName)
-                    .$(", systemName=").utf8(this.systemTableName)
+                    .$(", systemName=").utf8(this.systemTableName.getPrivateTableName())
                     .I$();
             this.txFile = new TxReader(ff).ofRO(path.trimTo(rootLen).concat(TXN_FILE_NAME).$(), partitionBy);
             path.trimTo(rootLen);
@@ -298,7 +297,7 @@ public class TableReader implements Closeable, SymbolTableSource {
         return getSymbolMapReader(columnIndex);
     }
 
-    public String getSystemTableName() {
+    public TableToken getSystemTableName() {
         return systemTableName;
     }
 
@@ -495,7 +494,7 @@ public class TableReader implements Closeable, SymbolTableSource {
 
             LOG.error()
                     .$("could not queue purge partition task, queue is full [")
-                    .$("systemTableName=").utf8(this.systemTableName)
+                    .$("systemTableName=").utf8(this.systemTableName.getPrivateTableName())
                     .$(", txn=").$(txn)
                     .$(']').$();
         }
@@ -735,7 +734,7 @@ public class TableReader implements Closeable, SymbolTableSource {
     }
 
     private TableReaderMetadata openMetaFile() {
-        TableReaderMetadata metadata = new TableReaderMetadata(configuration, tableName, systemTableName);
+        TableReaderMetadata metadata = new TableReaderMetadata(configuration, tableName, systemTableName.getPrivateTableName());
         try {
             metadata.load();
             return metadata;

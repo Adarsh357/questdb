@@ -22,19 +22,19 @@
  *
  ******************************************************************************/
 
-package io.questdb.cairo.wal;
+package io.questdb.cairo;
 
-import io.questdb.cairo.CairoConfiguration;
-import io.questdb.cairo.CairoException;
+import io.questdb.cairo.wal.AbstractTableNameRegistry;
 import io.questdb.log.Log;
 import io.questdb.log.LogFactory;
 import io.questdb.std.Chars;
-import io.questdb.std.ConcurrentHashMap;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TableNameRegistryRW extends AbstractTableNameRegistry {
     private static final Log LOG = LogFactory.getLog(TableNameRegistryRW.class);
-    private final ConcurrentHashMap<String> reverseTableNameCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<TableNameRecord> systemTableNameCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TableToken, String> reverseTableNameCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<CharSequence, TableToken> systemTableNameCache = new ConcurrentHashMap<>();
 
     public TableNameRegistryRW(CairoConfiguration configuration) {
         super(configuration);
@@ -47,22 +47,16 @@ public class TableNameRegistryRW extends AbstractTableNameRegistry {
     }
 
     @Override
-    public void deleteNonWalName(CharSequence tableName, String systemTableName) {
-        systemTableNameCache.remove(tableName);
-        reverseTableNameCache.remove(systemTableName);
-    }
-
-    @Override
-    public String registerName(String tableName, String systemTableName, boolean isWal) {
-        TableNameRecord newNameRecord = new TableNameRecord(systemTableName, isWal);
-        TableNameRecord registeredRecord = systemTableNameCache.putIfAbsent(tableName, newNameRecord);
+    public TableToken registerName(String tableName, String systemTableName, int tableId, boolean isWal) {
+        TableToken newNameRecord = new TableToken(tableName, systemTableName, tableId, isWal);
+        TableToken registeredRecord = systemTableNameCache.putIfAbsent(tableName, newNameRecord);
 
         if (registeredRecord == null) {
             if (isWal) {
-                tableNameStore.appendEntry(tableName, systemTableName);
+                tableNameStore.appendEntry(tableName, newNameRecord);
             }
-            reverseTableNameCache.put(systemTableName, tableName);
-            return systemTableName;
+            reverseTableNameCache.put(newNameRecord, tableName);
+            return newNameRecord;
         } else {
             return null;
         }
@@ -77,17 +71,29 @@ public class TableNameRegistryRW extends AbstractTableNameRegistry {
     }
 
     @Override
-    public void removeTableSystemName(CharSequence systemTableName) {
+    public boolean removeTableName(CharSequence tableName, TableToken systemTableName) {
+        TableToken nameRecord = systemTableNameCache.get(tableName);
+        if (nameRecord != null
+                && nameRecord.equals(systemTableName)
+                && systemTableNameCache.remove(tableName, nameRecord)) {
+            reverseTableNameCache.remove(nameRecord);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void removeTableSystemName(TableToken systemTableName) {
         reverseTableNameCache.remove(systemTableName);
     }
 
     @Override
-    public boolean removeWalTableName(CharSequence tableName, String systemTableName) {
-        TableNameRecord nameRecord = systemTableNameCache.get(tableName);
+    public boolean removeWalTableName(CharSequence tableName, TableToken systemTableName) {
+        TableToken nameRecord = systemTableNameCache.get(tableName);
         if (nameRecord != null
-                && nameRecord.systemTableName.equals(systemTableName)
+                && nameRecord.equals(systemTableName)
                 && systemTableNameCache.remove(tableName, nameRecord)) {
-            assert nameRecord.isWal;
+            assert nameRecord.isWal();
             tableNameStore.removeEntry(tableName, systemTableName);
             reverseTableNameCache.put(systemTableName, TABLE_DROPPED_MARKER);
             return true;
@@ -96,8 +102,8 @@ public class TableNameRegistryRW extends AbstractTableNameRegistry {
     }
 
     @Override
-    public String rename(CharSequence oldName, CharSequence newName, String systemTableName) {
-        TableNameRecord tableRecord = systemTableNameCache.get(oldName);
+    public String rename(CharSequence oldName, CharSequence newName, TableToken systemTableName) {
+        TableToken tableRecord = systemTableNameCache.get(oldName);
         String newTableNameStr = Chars.toString(newName);
 
         if (systemTableNameCache.putIfAbsent(newTableNameStr, tableRecord) == null) {

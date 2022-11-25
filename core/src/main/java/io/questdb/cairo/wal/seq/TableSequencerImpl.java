@@ -52,33 +52,32 @@ public class TableSequencerImpl implements TableSequencer {
     private final int rootLen;
     private final ReadWriteLock schemaLock = new SimpleReadWriteLock();
     private final SequencerMetadataUpdater sequencerMetadataUpdater;
-    private final String systemTableName;
+    private final TableToken systemTableName;
     private final TableTransactionLog tableTransactionLog;
     private final IDGenerator walIdGenerator;
     private volatile boolean closed = false;
     private boolean distressed;
     private volatile String tableName;
 
-    TableSequencerImpl(CairoEngine engine, String systemTableName, String tableName) {
+    TableSequencerImpl(CairoEngine engine, TableToken systemTableName) {
         this.engine = engine;
         this.systemTableName = systemTableName;
-        this.tableName = tableName;
 
         final CairoConfiguration configuration = engine.getConfiguration();
         final FilesFacade ff = configuration.getFilesFacade();
         try {
             path = new Path();
-            path.of(configuration.getRoot()).concat(systemTableName).concat(WalUtils.SEQ_DIR);
+            path.of(configuration.getRoot()).concat(systemTableName.getPrivateTableName()).concat(WalUtils.SEQ_DIR);
             rootLen = path.length();
             this.ff = ff;
             this.mkDirMode = configuration.getMkDirMode();
 
             metadata = new SequencerMetadata(ff);
-            sequencerMetadataUpdater = new SequencerMetadataUpdater(metadata, systemTableName);
+            sequencerMetadataUpdater = new SequencerMetadataUpdater(metadata, systemTableName.getPrivateTableName());
             walIdGenerator = new IDGenerator(configuration, WAL_INDEX_FILE_NAME);
             tableTransactionLog = new TableTransactionLog(ff);
         } catch (Throwable th) {
-            LOG.critical().$("could not create sequencer [name=").utf8(systemTableName)
+            LOG.critical().$("could not create sequencer [name=").utf8(systemTableName.getPrivateTableName())
                     .$(", error=").$(th.getMessage())
                     .I$();
             closeLocked();
@@ -175,7 +174,7 @@ public class TableSequencerImpl implements TableSequencer {
         return tableTransactionLog.lastTxn();
     }
 
-    public String getTableName() {
+    public TableToken getTableName() {
         return systemTableName;
     }
 
@@ -220,7 +219,7 @@ public class TableSequencerImpl implements TableSequencer {
                 applyToMetadata(change);
                 if (metadata.getStructureVersion() != expectedStructureVersion + 1) {
                     throw CairoException.critical(0)
-                            .put("applying structure change to WAL table failed [table=").put(systemTableName)
+                            .put("applying structure change to WAL table failed [table=").put(systemTableName.getPrivateTableName())
                             .put(", oldVersion: ").put(expectedStructureVersion)
                             .put(", newVersion: ").put(metadata.getStructureVersion())
                             .put(']');
@@ -231,7 +230,7 @@ public class TableSequencerImpl implements TableSequencer {
             }
         } catch (Throwable th) {
             distressed = true;
-            LOG.critical().$("could not apply structure change to WAL table sequencer [table=").utf8(systemTableName)
+            LOG.critical().$("could not apply structure change to WAL table sequencer [table=").utf8(systemTableName.getPrivateTableName())
                     .$(", error=").$(th.getMessage())
                     .I$();
             throw th;
@@ -257,7 +256,7 @@ public class TableSequencerImpl implements TableSequencer {
             }
         } catch (Throwable th) {
             distressed = true;
-            LOG.critical().$("could not apply transaction to WAL table sequencer [table=").utf8(systemTableName)
+            LOG.critical().$("could not apply transaction to WAL table sequencer [table=").utf8(systemTableName.getPrivateTableName())
                     .$(", error=").$(th.getMessage())
                     .I$();
             throw th;
@@ -275,7 +274,7 @@ public class TableSequencerImpl implements TableSequencer {
             metadata.open(path, rootLen);
             tableTransactionLog.open(path);
         } catch (Throwable th) {
-            LOG.critical().$("could not open sequencer [name=").utf8(systemTableName)
+            LOG.critical().$("could not open sequencer [name=").utf8(systemTableName.getPrivateTableName())
                     .$(", path=").$(path)
                     .$(", error=").$(th.getMessage())
                     .I$();

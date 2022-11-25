@@ -22,10 +22,9 @@
  *
  ******************************************************************************/
 
-package io.questdb.cairo.wal;
+package io.questdb.cairo;
 
-import io.questdb.cairo.CairoConfiguration;
-import io.questdb.cairo.CairoException;
+import io.questdb.cairo.wal.AbstractTableNameRegistry;
 import io.questdb.log.Log;
 import io.questdb.log.LogFactory;
 import io.questdb.std.datetime.millitime.MillisecondClock;
@@ -38,10 +37,10 @@ public class TableNameRegistryRO extends AbstractTableNameRegistry {
     private final long autoReloadTimeout;
     private final MillisecondClock clockMs;
     private volatile long lastReloadTimestampMs = 0;
-    private HashMap<CharSequence, String> reverseTableNameCache = new HashMap<>();
-    private HashMap<CharSequence, String> reverseTableNameCache2 = new HashMap<>();
-    private HashMap<CharSequence, TableNameRecord> systemTableNameCache = new HashMap<>();
-    private HashMap<CharSequence, TableNameRecord> systemTableNameCache2 = new HashMap<>();
+    private HashMap<TableToken, String> reverseTableNameCache = new HashMap<>();
+    private HashMap<TableToken, String> reverseTableNameCache2 = new HashMap<>();
+    private HashMap<CharSequence, TableToken> systemTableNameCache = new HashMap<>();
+    private HashMap<CharSequence, TableToken> systemTableNameCache2 = new HashMap<>();
 
     public TableNameRegistryRO(CairoConfiguration configuration) {
         super(configuration);
@@ -52,22 +51,7 @@ public class TableNameRegistryRO extends AbstractTableNameRegistry {
     }
 
     @Override
-    public void deleteNonWalName(CharSequence tableName, String systemTableName) {
-        throw CairoException.critical(0).put("instance is read only");
-    }
-
-    @Override
-    public TableNameRecord getTableNameRecord(CharSequence tableName) {
-        TableNameRecord record = systemTableNameCache.get(tableName);
-        if (record == null && clockMs.getTicks() - lastReloadTimestampMs > autoReloadTimeout) {
-            reloadTableNameCache();
-            record = systemTableNameCache.get(tableName);
-        }
-        return record;
-    }
-
-    @Override
-    public String registerName(String tableName, String systemTableName, boolean isWal) {
+    public TableToken registerName(String tableName, String systemTableName, int tableId, boolean isWal) {
         throw CairoException.critical(0).put("instance is read only");
     }
 
@@ -82,11 +66,11 @@ public class TableNameRegistryRO extends AbstractTableNameRegistry {
         // Swap the maps
         setNameMaps(systemTableNameCache2, reverseTableNameCache2);
 
-        HashMap<CharSequence, TableNameRecord> tmp = systemTableNameCache2;
+        HashMap<CharSequence, TableToken> tmp = systemTableNameCache2;
         systemTableNameCache2 = systemTableNameCache;
         systemTableNameCache = tmp;
 
-        HashMap<CharSequence, String> tmp2 = reverseTableNameCache2;
+        HashMap<TableToken, String> tmp2 = reverseTableNameCache2;
         reverseTableNameCache2 = reverseTableNameCache;
         reverseTableNameCache = tmp2;
 
@@ -94,17 +78,22 @@ public class TableNameRegistryRO extends AbstractTableNameRegistry {
     }
 
     @Override
-    public void removeTableSystemName(CharSequence systemTableName) {
+    public boolean removeTableName(CharSequence tableName, TableToken systemTableName) {
         throw CairoException.critical(0).put("instance is read only");
     }
 
     @Override
-    public boolean removeWalTableName(CharSequence tableName, String systemTableName) {
+    public void removeTableSystemName(TableToken systemTableName) {
         throw CairoException.critical(0).put("instance is read only");
     }
 
     @Override
-    public String rename(CharSequence oldName, CharSequence newName, String systemTableName) {
+    public boolean removeWalTableName(CharSequence tableName, TableToken systemTableName) {
+        throw CairoException.critical(0).put("instance is read only");
+    }
+
+    @Override
+    public String rename(CharSequence oldName, CharSequence newName, TableToken systemTableName) {
         throw CairoException.critical(0).put("instance is read only");
     }
 }

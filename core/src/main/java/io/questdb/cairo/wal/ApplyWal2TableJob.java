@@ -204,7 +204,7 @@ public class ApplyWal2TableJob extends AbstractQueueConsumerJob<WalTxnNotificati
 
     private static AlterOperation compileAlter(TableWriter tableWriter, SqlToOperation sqlToOperation, CharSequence sql, long seqTxn) throws SqlException {
         try {
-            return sqlToOperation.toAlterOperation(sql, tableWriter.getSystemTableName());
+            return sqlToOperation.toAlterOperation(sql, tableWriter.getTableToken());
         } catch (SqlException ex) {
             tableWriter.markSeqTxnCommitted(seqTxn);
             throw ex;
@@ -213,7 +213,7 @@ public class ApplyWal2TableJob extends AbstractQueueConsumerJob<WalTxnNotificati
 
     private static UpdateOperation compileUpdate(TableWriter tableWriter, SqlToOperation sqlToOperation, CharSequence sql, long seqTxn) throws SqlException {
         try {
-            return sqlToOperation.toUpdateOperation(sql, tableWriter.getSystemTableName());
+            return sqlToOperation.toUpdateOperation(sql, tableWriter.getTableToken());
         } catch (SqlException ex) {
             tableWriter.markSeqTxnCommitted(seqTxn);
             throw ex;
@@ -253,7 +253,7 @@ public class ApplyWal2TableJob extends AbstractQueueConsumerJob<WalTxnNotificati
     }
 
     private void applyOutstandingWalTransactions(
-            String systemTableName,
+            TableToken systemTableName,
             TableWriter writer,
             CairoEngine engine,
             SqlToOperation sqlToOperation,
@@ -292,7 +292,7 @@ public class ApplyWal2TableJob extends AbstractQueueConsumerJob<WalTxnNotificati
                             boolean hasNext;
                             if (structuralChangeCursor == null || !(hasNext = structuralChangeCursor.hasNext())) {
                                 Misc.free(structuralChangeCursor);
-                                structuralChangeCursor = tableSequencerAPI.getMetadataChangeLogCursor(writer.getSystemTableName(), newStructureVersion - 1);
+                                structuralChangeCursor = tableSequencerAPI.getMetadataChangeLogCursor(writer.getTableToken(), newStructureVersion - 1);
                                 hasNext = structuralChangeCursor.hasNext();
                             }
 

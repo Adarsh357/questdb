@@ -191,7 +191,7 @@ public class TextImportTask {
             CairoConfiguration cfg,
             CharSequence importRoot,
             TableWriter writer,
-            CharSequence systemTableName,
+            TableToken systemTableName,
             CharSequence column,
             int columnIndex,
             int symbolColumnIndex,
@@ -475,14 +475,14 @@ public class TextImportTask {
 
         public void run() {
             final CairoConfiguration configuration = cairoEngine.getConfiguration();
+
             tableNameSink.clear();
-            CharSequence systemTableName = cairoEngine.getSystemTableName(tableStructure.getTableName());
-            tableNameSink.put(systemTableName).put('_').put(index);
+            tableNameSink.put(tableStructure.getTableName()).put('_').put(index);
+            TableToken tableToken = cairoEngine.registerTableName(tableNameSink, false);
 
             final int columnCount = metadata.getColumnCount();
             try (TableWriter w = new TableWriter(configuration,
-                    tableNameSink,
-                    tableNameSink,
+                    tableToken,
                     cairoEngine.getMessageBus(),
                     null,
                     true,
@@ -505,7 +505,7 @@ public class TextImportTask {
         private CharSequence importRoot;
         private int partitionBy;
         private int symbolColumnIndex;
-        private CharSequence systemTableName;
+        private TableToken systemTableName;
         private int tmpTableCount;
         private TableWriter writer;
 
@@ -524,7 +524,7 @@ public class TextImportTask {
         public void of(CairoConfiguration cfg,
                        CharSequence importRoot,
                        TableWriter writer,
-                       CharSequence systemTableName,
+                       TableToken systemTableName,
                        CharSequence column,
                        int columnIndex,
                        int symbolColumnIndex,
@@ -544,7 +544,7 @@ public class TextImportTask {
 
         public void run(Path path) {
             final FilesFacade ff = cfg.getFilesFacade();
-            path.of(importRoot).concat(systemTableName);
+            path.of(importRoot).concat(systemTableName.getPrivateTableName());
             int plen = path.length();
             for (int i = 0; i < tmpTableCount; i++) {
                 path.trimTo(plen);
@@ -621,8 +621,8 @@ public class TextImportTask {
         public void run(Path path) {
             final FilesFacade ff = cairoEngine.getConfiguration().getFilesFacade();
 
-            CharSequence systemTableName = cairoEngine.getSystemTableName(tableStructure.getTableName());
-            path.of(root).concat(systemTableName).put('_').put(index);
+            TableToken systemTableName = cairoEngine.getSystemTableName(tableStructure.getTableName());
+            path.of(root).concat(systemTableName.getPrivateTableName()).put('_').put(index);
             int plen = path.length();
             PartitionBy.setSinkForPartition(path.slash(), tableStructure.getPartitionBy(), partitionTimestamp, false);
             path.concat(columnName).put(TableUtils.FILE_SUFFIX_D);
@@ -849,20 +849,19 @@ public class TextImportTask {
         ) throws TextException {
 
             this.utf8Sink = utf8Sink;
-            tableNameSink.clear();
-
-            CharSequence systemTableName = cairoEngine.getSystemTableName(targetTableStructure.getTableName());
-            tableNameSink.put(systemTableName).put('_').put(index);
 
             final CairoConfiguration configuration = cairoEngine.getConfiguration();
             final FilesFacade ff = configuration.getFilesFacade();
-            createTable(ff, configuration.getMkDirMode(), importRoot, tableNameSink, targetTableStructure, 0);
+
+            tableNameSink.clear();
+            tableNameSink.put(targetTableStructure.getTableName()).put('_').put(index);
+            TableToken tableToken = cairoEngine.registerTableName(tableNameSink, false);
+            createTable(ff, configuration.getMkDirMode(), importRoot, tableToken.getPrivateTableName(), targetTableStructure, 0);
 
             try (
                     TableWriter writer = new TableWriter(
                             configuration,
-                            tableNameSink,
-                            tableNameSink,
+                            tableToken,
                             cairoEngine.getMessageBus(),
                             null,
                             true,

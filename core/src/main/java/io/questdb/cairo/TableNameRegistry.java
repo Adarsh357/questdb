@@ -22,38 +22,34 @@
  *
  ******************************************************************************/
 
-package io.questdb.cairo.wal;
+package io.questdb.cairo;
 
 import java.io.Closeable;
 
 public interface TableNameRegistry extends Closeable {
     void close();
 
-    void deleteNonWalName(CharSequence tableName, String systemTableName);
+    TableToken getSystemName(CharSequence tableName);
 
-    String getSystemName(CharSequence tableName);
+    String getTableNameBySystemName(TableToken systemTableName);
 
-    String getTableNameBySystemName(CharSequence systemTableName);
+    Iterable<TableToken> getTableSystemNames();
 
-    TableNameRecord getTableNameRecord(CharSequence tableName);
-
-    Iterable<CharSequence> getTableSystemNames();
-
-    boolean isWalSystemTableName(CharSequence systemTableName);
-
-    boolean isWalTableDropped(CharSequence systemTableName);
+    boolean isWalTableDropped(TableToken systemTableName);
 
     boolean isWalTableName(CharSequence tableName);
 
-    String registerName(String tableName, String systemTableName, boolean isWal);
+    TableToken registerName(String tableName, String systemTableName, int tableId, boolean isWal);
 
     void reloadTableNameCache();
 
-    void removeTableSystemName(CharSequence systemTableName);
+    boolean removeTableName(CharSequence tableName, TableToken systemTableName);
 
-    boolean removeWalTableName(CharSequence tableName, String systemTableName);
+    void removeTableSystemName(TableToken systemTableName);
 
-    String rename(CharSequence oldName, CharSequence newName, String systemTableName);
+    boolean removeWalTableName(CharSequence tableName, TableToken systemTableName);
+
+    String rename(CharSequence oldName, CharSequence newName, TableToken systemTableName);
 
     void resetMemory();
 }

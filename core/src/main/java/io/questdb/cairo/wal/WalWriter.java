@@ -309,7 +309,7 @@ public class WalWriter implements TableWriterAPI {
         return initialSymbolCounts.get(columnIndex);
     }
 
-    public String getSystemTableName() {
+    public String getTableToken() {
         return systemTableName;
     }
 

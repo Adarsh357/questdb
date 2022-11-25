@@ -952,7 +952,7 @@ public final class TableUtils {
         }
     }
 
-    public static boolean schedulePurgeO3Partitions(MessageBus messageBus, String tableName, int partitionBy) {
+    public static boolean schedulePurgeO3Partitions(MessageBus messageBus, TableToken tableName, int partitionBy) {
         final MPSequence seq = messageBus.getO3PurgeDiscoveryPubSeq();
         while (true) {
             long cursor = seq.next();
